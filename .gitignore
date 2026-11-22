@@ -1,0 +1,21 @@
+# Uploaded PDFs and SQLite data
+data/
+pdf-highlight.db*
+
+# Dependencies and build output
+node_modules/
+dist/
+bin/
+obj/
+/frontend/public/pdfjs/
+
+# Test and local output
+test-results/
+playwright-report/
+/output/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+.DS_Store

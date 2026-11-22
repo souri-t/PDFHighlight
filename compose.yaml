@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./backend
+    environment:
+      DataDirectory: /data
+    volumes:
+      - type: bind
+        source: ${PDF_DATA_DIR:-./data}
+        target: /data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 2s
+      timeout: 2s
+      retries: 10
+  web:
+    build: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${PDF_HIGHLIGHT_PORT:-8080}:8080"
