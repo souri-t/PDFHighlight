@@ -16,7 +16,7 @@ public sealed record PageRectangle(double Left, double Top, double Right, double
 public sealed record HighlightInfo(
     Guid Id, Guid DocumentId, int PageNumber, PageRectangle Rectangle, string Description, DateTime CreatedAt);
 
-public sealed record NewHighlight(int PageNumber, PageRectangle? Rectangle, string? Description);
+public sealed record NewHighlight(int PageNumber, PageRectangle? Rectangle, string? Description, Guid? Id = null);
 
 public sealed class InvalidInputException(string message) : Exception(message);
 

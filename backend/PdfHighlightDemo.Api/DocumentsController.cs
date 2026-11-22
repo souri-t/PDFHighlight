@@ -6,7 +6,7 @@ namespace PdfHighlightDemo.Api;
 
 [ApiController]
 [Route("api/documents")]
-public sealed class DocumentsController(DocumentService documents) : ControllerBase
+public sealed class DocumentsController(DocumentService documents, ProofreadingJobs proofreading) : ControllerBase
 {
     [HttpGet]
     public Task<IReadOnlyList<DocumentInfo>> List(CancellationToken ct) => documents.ListDocumentsAsync(ct);
@@ -38,6 +38,7 @@ public sealed class DocumentsController(DocumentService documents) : ControllerB
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         await documents.DeleteDocumentAsync(id, ct);
+        proofreading.Forget(id);
         return NoContent();
     }
 

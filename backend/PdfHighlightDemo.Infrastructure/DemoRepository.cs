@@ -39,7 +39,7 @@ internal sealed class DemoRepository(DemoDbContext db) : IDemoRepository
                 new PageRectangle(row.Left, row.Top, row.Right, row.Bottom), row.Description, row.CreatedAt))
             .ToListAsync(ct);
 
-    public async Task AddHighlightAsync(HighlightInfo highlight, CancellationToken ct)
+    public async Task<HighlightInfo> AddHighlightAsync(HighlightInfo highlight, CancellationToken ct)
     {
         db.Highlights.Add(new HighlightEntity
         {
@@ -58,11 +58,24 @@ internal sealed class DemoRepository(DemoDbContext db) : IDemoRepository
         {
             await db.SaveChangesAsync(ct);
         }
+        catch (DbUpdateException error) when (error.InnerException is SqliteException { SqliteExtendedErrorCode: 1555 })
+        {
+            // A repeated adoption uses the original candidate's ID.
+            var existing = await db.Highlights.AsNoTracking().Where(row => row.Id == highlight.Id)
+                .Select(row => new HighlightInfo(row.Id, row.DocumentId, row.PageNumber,
+                    new PageRectangle(row.Left, row.Top, row.Right, row.Bottom), row.Description, row.CreatedAt))
+                .SingleOrDefaultAsync(ct);
+            if (existing is not null && (existing with { CreatedAt = highlight.CreatedAt }) == highlight)
+                return existing;
+
+            throw new InvalidInputException("このハイライトIDは別の範囲ですでに使用されています。");
+        }
         catch (DbUpdateException error) when (error.InnerException is SqliteException { SqliteExtendedErrorCode: 787 })
         {
             // The document may have been deleted between validation and insertion.
             throw new DocumentNotFoundException();
         }
+        return highlight;
     }
 
     public async Task<bool> DeleteHighlightAsync(Guid id, CancellationToken ct) =>

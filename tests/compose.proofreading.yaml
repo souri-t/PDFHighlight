@@ -1,0 +1,14 @@
+services:
+  api:
+    environment:
+      Llm__BaseUrl: http://llm-mock:11434/v1
+      Llm__Model: proofreading-test
+      Llm__ApiKey: ""
+      Llm__UseJsonSchema: "true"
+  llm-mock:
+    image: node:22-bookworm-slim
+    command: ["node", "/test/llm-mock.mjs"]
+    volumes:
+      - ./tests/llm-mock.mjs:/test/llm-mock.mjs:ro
+    ports:
+      - "127.0.0.1:${MOCK_LLM_PORT:-55134}:11434"

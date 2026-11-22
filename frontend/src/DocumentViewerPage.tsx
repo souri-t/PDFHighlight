@@ -20,12 +20,14 @@ import {
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api, errorMessage } from './api';
 import { ConfirmDelete } from './ConfirmDelete';
+import { ProofreadingPanel } from './ProofreadingPanel';
 import { fromScaled, toHighlight } from './coordinates';
-import type { DocumentInfo, HighlightInfo, HighlightRegion } from './models';
+import type { DocumentInfo, HighlightInfo, HighlightRegion, ProofreadingCandidate } from './models';
 
 interface OverlayHighlight extends Highlight {
   item?: HighlightInfo;
   selected?: boolean;
+  proofreading?: boolean;
 }
 
 const minScale = 0.25;
@@ -35,6 +37,10 @@ function HighlightOverlay({ onSelect }: { onSelect: (id: string) => void }) {
   const { highlight } = useHighlightContainerContext<OverlayHighlight>();
   const { left, top, width, height } = highlight.position.boundingRect;
   const style = { left, top, width, height };
+  if (highlight.proofreading) {
+    return <span className="highlight-rectangle highlight-rectangle--proofreading" style={style}
+      aria-label="誤字候補の範囲" />;
+  }
   if (!highlight.item) {
     return <span className="highlight-rectangle highlight-rectangle--draft" style={style} />;
   }
@@ -59,7 +65,9 @@ function DocumentViewer({ id }: { id: string }) {
   const [document, setDocument] = useState<DocumentInfo | null>(null);
   const [items, setItems] = useState<HighlightInfo[] | null>(null);
   const [loadError, setLoadError] = useState('');
-  const [viewerReady, setViewerReady] = useState(false);
+  const [viewer, setViewer] = useState<ReturnType<PdfHighlighterUtils['getViewer']>>(null);
+  const viewerReady = viewer !== null;
+  const [proofreadingPreview, setProofreadingPreview] = useState<ProofreadingCandidate | null>(null);
   const [mode, setMode] = useState<'text' | 'area'>('text');
   const [scale, setScale] = useState<PdfScaleValue>('page-width');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -72,14 +80,25 @@ function DocumentViewer({ id }: { id: string }) {
   const [deleteError, setDeleteError] = useState('');
   const highlighter = useRef<PdfHighlighterUtils | null>(null);
   const observedViewer = useRef<ReturnType<PdfHighlighterUtils['getViewer']>>(null);
+  const unbindViewer = useRef<(() => void) | null>(null);
   const listButtons = useRef(new Map<string, HTMLButtonElement>());
 
   const selected = items?.find((item) => item.id === selectedId);
-  const highlights = useMemo(() => (items ?? []).map((item): OverlayHighlight => ({
-    ...toHighlight(item.id, item),
-    item,
-    selected: item.id === selectedId,
-  })), [items, selectedId]);
+  const highlights = useMemo(() => {
+    const overlays = (items ?? []).map((item): OverlayHighlight => ({
+      ...toHighlight(item.id, item),
+      item,
+      selected: item.id === selectedId,
+    }));
+    if (proofreadingPreview?.rectangle && !overlays.some(({ id }) => id === proofreadingPreview.id)) {
+      overlays.push({
+        ...toHighlight(proofreadingPreview.id, { pageNumber: proofreadingPreview.pageNumber,
+          rectangle: proofreadingPreview.rectangle }),
+        proofreading: true,
+      });
+    }
+    return overlays;
+  }, [items, proofreadingPreview, selectedId]);
   const source = useMemo(() => ({
     url: api.contentUrl(id),
     cMapUrl: '/pdfjs/cmaps/',
@@ -102,24 +121,34 @@ function DocumentViewer({ id }: { id: string }) {
     return () => request.abort();
   }, [id]);
 
+  useEffect(() => () => unbindViewer.current?.(), []);
+
   function bindHighlighter(utils: PdfHighlighterUtils) {
     highlighter.current = utils;
     const viewer = utils.getViewer();
     if (!viewer || observedViewer.current === viewer) return;
     observedViewer.current = viewer;
-    const ready = () => setViewerReady(true);
+    const ready = () => setViewer(viewer);
+    unbindViewer.current?.();
+    unbindViewer.current = () => viewer.eventBus.off('pagesinit', ready);
     // The library calls utilsRef while rendering, before PDF.js has always initialized its pages.
     if (viewer.getPageView(0)) queueMicrotask(ready);
     else viewer.eventBus.on('pagesinit', ready, { once: true });
   }
 
   function selectFromPdf(highlightId: string) {
+    setProofreadingPreview(null);
     setSelectedId(highlightId);
     listButtons.current.get(highlightId)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   function selectFromList(item: HighlightInfo) {
+    setProofreadingPreview(null);
     setSelectedId(item.id);
+    scrollToRegion(item);
+  }
+
+  function scrollToRegion(item: HighlightRegion) {
     const viewer = highlighter.current?.getViewer();
     const viewport = viewer?.getPageView(item.pageNumber - 1)?.viewport;
     if (!viewer || !viewport) return;
@@ -128,6 +157,26 @@ function DocumentViewer({ id }: { id: string }) {
       Math.max(0, item.rectangle.top * viewport.height - 20),
     );
     viewer.scrollPageIntoView({ pageNumber: item.pageNumber, destArray: [null, { name: 'XYZ' }, ...point, null] });
+  }
+
+  function previewCandidate(candidate: ProofreadingCandidate | null) {
+    setProofreadingPreview(candidate);
+    if (!candidate?.rectangle) return;
+    setSelectedId((items ?? []).some((item) => item.id === candidate.id) ? candidate.id : null);
+    scrollToRegion({ pageNumber: candidate.pageNumber, rectangle: candidate.rectangle });
+  }
+
+  async function adoptCandidate(candidate: ProofreadingCandidate) {
+    if (!candidate.rectangle) return;
+    const suggestion = candidate.suggestion ? `「${candidate.suggestion}」` : '削除';
+    const description = `「${candidate.original}」→ ${suggestion}${candidate.reason ? `\n${candidate.reason}` : ''}`;
+    const item = await api.addHighlight(id, {
+      id: candidate.id, pageNumber: candidate.pageNumber, rectangle: candidate.rectangle, description,
+    });
+    setItems((current) => current?.some(({ id }) => id === item.id) ? current : [...(current ?? []), item]);
+    setProofreadingPreview(null);
+    setSelectedId(item.id);
+    scrollToRegion(item);
   }
 
   function selectArea(selection: PdfSelection) {
@@ -257,7 +306,10 @@ function DocumentViewer({ id }: { id: string }) {
               </PdfLoader>
             </div>
           </section>
-          <aside className="highlight-panel" aria-labelledby="highlight-heading">
+          <aside className="highlight-panel" aria-label="PDFレビュー">
+            <ProofreadingPanel documentId={id} pageCount={document.pageCount}
+              viewer={viewer} highlights={items ?? []} selectedId={proofreadingPreview?.id}
+              onPreview={previewCandidate} onAdopt={adoptCandidate} />
             <div className="panel-heading">
               <LayersOutlined fontSize="small" />
               <h2 id="highlight-heading">ハイライト</h2>

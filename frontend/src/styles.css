@@ -232,3 +232,46 @@
   .viewer-heading { gap: 8px; }
   .viewer-title > span { display: none; }
 }
+
+.proofreading-panel {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  max-height: 62%;
+  border-bottom: 1px solid var(--line);
+  background: #fafbfe;
+}
+.proofreading-controls { padding: 10px 12px 12px; }
+.proofreading-controls .MuiToggleButton-root { padding: 4px 10px; font-size: 12px; }
+.proofreading-target { margin: 6px 0; color: var(--muted); font-size: 12px; }
+.proofreading-progress {
+  display: grid;
+  gap: 3px;
+  padding: 0 12px 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.proofreading-results { overflow: auto; padding: 0 12px; min-height: 0; }
+.proofreading-results > .MuiAlert-root { margin-bottom: 8px; font-size: 12px; }
+.proofreading-results ul { padding: 0; margin: 0; list-style: none; }
+.proofreading-results li {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.proofreading-results .proofreading-candidate--selected { border-color: #8178d6; background: #f4f2ff; }
+.proofreading-page, .proofreading-reason, .proofreading-empty { color: var(--muted); font-size: 12px; }
+.proofreading-change, .proofreading-reason { margin: 4px 0; }
+.proofreading-change { font-size: 13px; }
+.proofreading-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
+.highlight-rectangle--proofreading { border: 2px solid #5844b2; background: #8072da45; pointer-events: none; }
+
+@media (max-width: 760px) {
+  .highlight-panel { overflow-y: auto; }
+  .proofreading-panel { max-height: none; }
+  .proofreading-results { max-height: 240px; }
+  .highlight-list { flex: 1 0 auto; overflow: visible; }
+}

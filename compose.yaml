@@ -3,6 +3,11 @@ services:
     build: ./backend
     environment:
       DataDirectory: /data
+      Llm__BaseUrl: ${LLM_BASE_URL:-}
+      Llm__Model: ${LLM_MODEL:-}
+      Llm__ApiKey: ${LLM_API_KEY:-}
+      Llm__UseJsonSchema: ${LLM_USE_JSON_SCHEMA:-true}
+      Llm__TimeoutSeconds: ${LLM_TIMEOUT_SECONDS:-120}
     volumes:
       - type: bind
         source: ${PDF_DATA_DIR:-./data}

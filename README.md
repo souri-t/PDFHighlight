@@ -60,3 +60,41 @@ APIはASP.NET Core 10、永続化はEF Core 10とSQLiteを使います。Busines
 | GET | `/api/documents/{id}/highlights` | ハイライト一覧を取得 |
 | POST | `/api/documents/{id}/highlights` | `pageNumber`、`rectangle`、任意の `description` で登録 |
 | DELETE | `/api/highlights/{id}` | ハイライトを削除 |
+
+## AI誤字チェック
+
+OpenAI互換APIの `POST /v1/chat/completions` を利用します。Composeを起動する前にルートの `.env` に接続先とモデル名を設定してください。
+
+```dotenv
+LLM_BASE_URL=http://host.docker.internal:11434/v1
+LLM_MODEL=利用するモデル名
+```
+
+上のURLは、Docker Desktopのホストで互換APIを動かす場合の例です。APIコンテナから到達できるURLを指定してください。 [Docker Desktopのネットワーク設定](https://docs.docker.com/desktop/features/networking/#networking-features)認証が必要な場合は `LLM_API_KEY` を設定します。JSON Schemaに対応しない互換APIでは `LLM_USE_JSON_SCHEMA=false` を指定すると、本文でJSONを要求し、受け取った応答をアプリで検証します。応答の待ち時間は1ページあたり120秒で、`LLM_TIMEOUT_SECONDS` で調整できます。
+
+1. PDFを開き、「現在のページ」または「全ページ」を選びます。
+2. 「誤字チェックを開始」を押します。全ページを選んだときはページ順に処理され、進捗と完了したページの候補が表示されます。PDFの本文を接続先へ送信するのは、この操作で開始した処理だけです。
+3. 候補の「位置を表示」で該当箇所を確認します。「採用」を押すと、修正案と理由を含むハイライトがSQLiteに保存されます。位置を一意に照合できない候補も一覧に表示されます。
+4. [日本語の検証用PDF](tests/fixtures/japanese-proofreading.pdf) には各ページに2箇所ずつ、計6箇所の誤字があります。「本人確確認」「電話番語」「２週刊」「７日簡」「返却ボクスッ」「くさだい」が検証対象です。
+
+校正は文字を抽出できる横書きPDFを対象とし、1ページあたり20,000文字まで処理します。画像のみのページや途中で失敗したページはページ別に表示し、残りのページは処理を続けます。未採用の候補と進捗はAPIのメモリに保持され、再起動すると消えます。
+
+| メソッド | パス | 内容 |
+| --- | --- | --- |
+| POST | `/api/documents/{id}/proofreading` | `{"scope":"page","pageNumber":2}` または `{"scope":"all"}` で開始し、`202` とチェックIDを返す |
+| GET | `/api/documents/{id}/proofreading` | 最新のチェック結果を取得。履歴がない場合は `204` |
+| GET | `/api/documents/{id}/proofreading/{checkId}` | 進捗、ページ別エラー、誤字候補と0〜1の矩形を取得 |
+
+AI採用時は既存のハイライト登録APIに候補IDを `id` として渡します。同じIDと同じ内容で再送した場合は、保存済みのハイライトを返します。
+
+### 互換APIのモックで検証
+
+検証用のCompose設定では、テストデータ専用の互換APIを追加します。既存のアプリやPDFに影響しないよう、別ポートと別データフォルダを使います。
+
+```sh
+export PDF_DATA_DIR="$(mktemp -d)"
+export PDF_HIGHLIGHT_PORT=55080
+docker compose -p pdfhighlight-test -f compose.yaml -f tests/compose.proofreading.yaml up --build -d --wait
+BASE_URL=http://127.0.0.1:55080 PROOFREADING_MOCK_URL=http://127.0.0.1:55134 npm --prefix tests test
+docker compose -p pdfhighlight-test -f compose.yaml -f tests/compose.proofreading.yaml down
+```

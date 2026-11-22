@@ -27,6 +27,14 @@ public static class InfrastructureSetup
         return services;
     }
 
+    public static IServiceCollection AddProofreadingInfrastructure(this IServiceCollection services,
+        ProofreadingModelOptions options)
+    {
+        services.AddSingleton<IPdfProofreadingReader, PdfProofreadingReader>();
+        services.AddSingleton<IProofreadingModel>(_ => new OpenAiProofreadingModel(options));
+        return services;
+    }
+
     public static async Task InitializeDemoDatabaseAsync(this IServiceProvider services)
     {
         await using var scope = services.CreateAsyncScope();

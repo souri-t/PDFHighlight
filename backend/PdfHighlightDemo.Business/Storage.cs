@@ -7,7 +7,7 @@ public interface IDemoRepository
     Task AddDocumentAsync(StoredDocument document, CancellationToken cancellationToken);
     Task<bool> DeleteDocumentAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<HighlightInfo>> ListHighlightsAsync(Guid documentId, CancellationToken cancellationToken);
-    Task AddHighlightAsync(HighlightInfo highlight, CancellationToken cancellationToken);
+    Task<HighlightInfo> AddHighlightAsync(HighlightInfo highlight, CancellationToken cancellationToken);
     Task<bool> DeleteHighlightAsync(Guid id, CancellationToken cancellationToken);
 }
 

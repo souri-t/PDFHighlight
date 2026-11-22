@@ -1,8 +1,15 @@
-import type { DocumentInfo, HighlightInfo, NewHighlight } from './models';
+import type { DocumentInfo, HighlightInfo, NewHighlight, ProofreadingCheck, ProofreadingScope } from './models';
 
 const documentsUrl = '/api/documents';
 const documentUrl = (id: string) => `${documentsUrl}/${encodeURIComponent(id)}`;
 const highlightsUrl = (id: string) => `${documentUrl(id)}/highlights`;
+const proofreadingUrl = (id: string) => `${documentUrl(id)}/proofreading`;
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 
 async function request(path: string, options?: RequestInit): Promise<Response> {
   const response = await fetch(path, options);
@@ -11,7 +18,7 @@ async function request(path: string, options?: RequestInit): Promise<Response> {
     const message = response.status === 413
       ? 'ファイルサイズは50 MiB以下にしてください。'
       : problem?.title ?? `リクエストに失敗しました（HTTP ${response.status}）。`;
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
   return response;
 }
@@ -35,6 +42,19 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(item),
   }),
+  startProofreading: (id: string, scope: ProofreadingScope, signal: AbortSignal) =>
+    json<ProofreadingCheck>(proofreadingUrl(id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(scope),
+      signal,
+    }),
+  async latestProofreading(id: string, signal: AbortSignal): Promise<ProofreadingCheck | null> {
+    const response = await request(proofreadingUrl(id), { signal });
+    return response.status === 204 ? null : response.json() as Promise<ProofreadingCheck>;
+  },
+  proofreading: (id: string, checkId: string, signal: AbortSignal) =>
+    json<ProofreadingCheck>(`${proofreadingUrl(id)}/${encodeURIComponent(checkId)}`, { signal }),
   deleteHighlight: (id: string) => request(`/api/highlights/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 

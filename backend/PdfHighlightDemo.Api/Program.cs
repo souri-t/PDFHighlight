@@ -14,6 +14,14 @@ builder.Services.AddScoped<DocumentService>();
 builder.Services.AddDemoInfrastructure(builder.Configuration["DataDirectory"] ??
     Path.Combine(builder.Environment.ContentRootPath, "data"));
 
+var llm = builder.Configuration.GetSection("Llm");
+builder.Services.AddProofreadingInfrastructure(new ProofreadingModelOptions(
+    llm["BaseUrl"], llm["Model"], llm["ApiKey"], llm.GetValue("UseJsonSchema", true),
+    llm.GetValue("TimeoutSeconds", 120)));
+builder.Services.AddScoped<ProofreadingService>();
+builder.Services.AddSingleton<ProofreadingJobs>();
+builder.Services.AddHostedService(services => services.GetRequiredService<ProofreadingJobs>());
+
 var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();

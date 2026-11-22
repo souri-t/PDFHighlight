@@ -8,6 +8,9 @@ public sealed class DocumentService(IDemoRepository repository, IPdfStorage stor
     public Task<IReadOnlyList<DocumentInfo>> ListDocumentsAsync(CancellationToken ct) =>
         repository.ListDocumentsAsync(ct);
 
+    public async Task<DocumentInfo> GetDocumentAsync(Guid id, CancellationToken ct) =>
+        (await RequireDocumentAsync(id, ct)).Info;
+
     public async Task<DocumentInfo> UploadAsync(string fileName, long length, Stream contents, CancellationToken ct)
     {
         var safeName = Path.GetFileName(fileName.Replace('\\', '/')).Trim();
@@ -73,10 +76,12 @@ public sealed class DocumentService(IDemoRepository repository, IPdfStorage stor
         if (description.Length > MaxDescriptionLength)
             throw new InvalidInputException("説明は2,000文字以内で入力してください。");
 
-        var highlight = new HighlightInfo(Guid.NewGuid(), documentId, request.PageNumber, rectangle,
-            description, DateTime.UtcNow);
-        await repository.AddHighlightAsync(highlight, ct);
-        return highlight;
+        if (request.Id == Guid.Empty)
+            throw new InvalidInputException("ハイライトIDが不正です。");
+
+        var highlight = new HighlightInfo(request.Id ?? Guid.NewGuid(), documentId, request.PageNumber,
+            rectangle, description, DateTime.UtcNow);
+        return await repository.AddHighlightAsync(highlight, ct);
     }
 
     public Task<bool> DeleteHighlightAsync(Guid id, CancellationToken ct) =>
