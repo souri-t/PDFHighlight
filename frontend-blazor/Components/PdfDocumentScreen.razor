@@ -1,0 +1,325 @@
+@implements IDisposable
+@inject ReviewApi Api
+
+<main class="viewer-page">
+    <div class="viewer-heading">
+        <MudButton Href="/" StartIcon="@Icons.Material.Rounded.ArrowBack">一覧に戻る</MudButton>
+        @if (_document is { } document)
+        {
+            <div class="viewer-title"><h1>@document.FileName</h1><span>@document.PageCount ページ</span></div>
+        }
+    </div>
+    @if (_document is null || _bytes is null)
+    {
+        @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+        else { <div class="viewer-loading"><MudProgressCircular Indeterminate="true" /></div> }
+    }
+    else
+    {
+        <div class="viewer-workspace">
+            <section class="preview" aria-label="閲覧">
+                <div class="viewer-toolbar">
+                    <div class="control-group" role="group" aria-label="選択モード">
+                        <MudButton Size="Size.Small" Variant="@(!_rectangleMode ? Variant.Filled : Variant.Outlined)"
+                                   aria-pressed="@(!_rectangleMode ? "true" : "false")" OnClick="@(() => _rectangleMode = false)">文字選択</MudButton>
+                        <MudButton Size="Size.Small" Variant="@(_rectangleMode ? Variant.Filled : Variant.Outlined)"
+                                   aria-pressed="@(_rectangleMode ? "true" : "false")" OnClick="@(() => _rectangleMode = true)">矩形選択</MudButton>
+                    </div>
+                    <div class="zoom-controls" role="group" aria-label="表示倍率">
+                        <MudIconButton Icon="@Icons.Material.Rounded.ZoomOut" Size="Size.Small" aria-label="縮小" OnClick="@(() => Zoom(-1))" />
+                        <output aria-label="現在の倍率">@(_canvas?.ZoomLabel ?? "ページ幅")</output>
+                        <MudIconButton Icon="@Icons.Material.Rounded.ZoomIn" Size="Size.Small" aria-label="拡大" OnClick="@(() => Zoom(1))" />
+                        <MudIconButton Icon="@Icons.Material.Rounded.FitScreen" Size="Size.Small" aria-label="幅に合わせる" OnClick="FitWidth" />
+                    </div>
+                </div>
+                <PdfCanvas @ref="_canvas" Bytes="_bytes" Highlights="_highlights" SelectedId="@_selected?.Id"
+                           Preview="_preview" Draft="_draft" RectangleMode="@_rectangleMode"
+                           CurrentPageChanged="@((int value) => _page = value)" RectangleCompleted="BeginDraft"
+                           HighlightSelected="SelectOverlay" />
+            </section>
+
+            <aside class="workbook-review" aria-label="PDFレビュー">
+                @if (_error is not null && _draft is null && _deleting is null)
+                {
+                    <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert>
+                }
+                <section aria-labelledby="pdf-proofreading-heading">
+                    <div class="panel-heading">
+                        <h2 id="pdf-proofreading-heading">誤字チェック</h2>
+                        @if (_check is not null) { <span>候補 @_check.Pages.Sum(page => page.Candidates.Count) 件</span> }
+                    </div>
+                    <div class="proofreading-controls">
+                        <div class="control-group" role="group" aria-label="誤字チェックの対象">
+                            <MudButton Size="Size.Small" Variant="@(!_all ? Variant.Filled : Variant.Outlined)"
+                                       Disabled="@Checking" OnClick="@(() => _all = false)">現在のページ</MudButton>
+                            <MudButton Size="Size.Small" Variant="@(_all ? Variant.Filled : Variant.Outlined)"
+                                       Disabled="@Checking" OnClick="@(() => _all = true)">全ページ</MudButton>
+                        </div>
+                        <p class="proofreading-target">対象：@(_all ? $"全{_document.PageCount}ページ" : $"{_page}ページ")</p>
+                        <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Primary"
+                                   Disabled="@Checking" OnClick="StartCheck">@(Checking ? "チェック中…" : "誤字チェックを開始")</MudButton>
+                    </div>
+                    @if (Checking)
+                    {
+                        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+                    }
+                    @if (_check is { } check)
+                    {
+                        <p role="status" class="workbook-review-message">@($"{check.ProcessedPages} / {check.TotalPages}ページ処理済み")</p>
+                        @if (check.Message is { } message) { <MudAlert role="alert" Severity="Severity.Error">@message</MudAlert> }
+                        @foreach (var warning in check.Pages.Where(page => page.Status != "completed"))
+                        {
+                            <MudAlert role="alert" Severity="Severity.Warning">@(warning.PageNumber)ページ · @warning.Message</MudAlert>
+                        }
+                        @if (check.Pages.Any(page => page.Candidates.Count > 0))
+                        {
+                            <ul class="workbook-findings" aria-label="誤字候補">
+                                @foreach (var item in check.Pages.SelectMany(page => page.Candidates))
+                                {
+                                    var saved = _highlights.Any(highlight => highlight.Id == item.Id);
+                                    <li @key="item.Id" class="@(_preview?.Id == item.Id ? "workbook-finding-selected" : "")">
+                                        <strong>@item.PageNumber ページ</strong>
+                                        <p><mark>@item.Original</mark> → @(string.IsNullOrEmpty(item.Suggestion) ? "削除" : item.Suggestion)</p>
+                                        @if (item.Reason.Length > 0) { <p>@item.Reason</p> }
+                                        @if (item.Rectangle is not null)
+                                        {
+                                            <div class="proofreading-actions">
+                                                <MudButton Size="Size.Small" OnClick="@(() => FocusCandidate(item))">位置を表示</MudButton>
+                                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="@(saved || _saving)"
+                                                           OnClick="@(() => Adopt(item))">@(saved ? "採用済み" : "採用")</MudButton>
+                                            </div>
+                                        }
+                                        else { <small>位置を特定できませんでした</small> }
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else if (!check.Active && check.Status == "completed" && check.Pages.Any(page => page.Status == "completed"))
+                        {
+                            <p class="workbook-review-message">チェックできたページに誤字候補はありません。</p>
+                        }
+                    }
+                </section>
+                <div class="panel-heading"><h2>ハイライト</h2><span>@_highlights.Count 件</span></div>
+                @if (_selected is { } selected)
+                {
+                    <div class="selected-highlight" aria-live="polite"><span>@selected.PageNumber ページのハイライト</span><p>@Label(selected)</p></div>
+                }
+                @if (_highlights.Count == 0)
+                {
+                    <p class="workbook-review-message">ハイライトはまだありません。</p>
+                }
+                else
+                {
+                    <ul class="workbook-findings" aria-label="登録済みハイライト">
+                        @foreach (var highlight in _highlights)
+                        {
+                            <li @key="highlight.Id" class="highlight-list-row @(highlight.Id == _selected?.Id ? "workbook-finding-selected" : "")">
+                                <button class="highlight-item" type="button"
+                                        @onclick="() => FocusHighlight(highlight)">@highlight.PageNumber ページ @Label(highlight)</button>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small"
+                                               aria-label="@($"ハイライトを削除：{Label(highlight)}")"
+                                               OnClick="@(() => { _error = null; _deleting = highlight; })" />
+                            </li>
+                        }
+                    </ul>
+                }
+            </aside>
+        </div>
+    }
+
+    @if (_draft is { } draft)
+    {
+        <ReviewDialog Title="ハイライトを登録" ActionText="登録する" Busy="_saving" Cancel="@(() => _draft = null)" Confirm="SaveDraft">
+            <p>@draft.Page ページの選択範囲</p>
+            <label class="review-field">説明（任意）<textarea @bind="_description" @bind:event="oninput" maxlength="2000" rows="3" autofocus></textarea></label>
+            @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+        </ReviewDialog>
+    }
+    @if (_deleting is not null)
+    {
+        <ReviewDialog Title="ハイライトを削除しますか？" ActionText="削除する" Color="Color.Error"
+                      Busy="_saving" Cancel="@(() => _deleting = null)" Confirm="DeleteHighlight">
+            <p>@_deleting.PageNumber ページのハイライトを削除します。</p>
+            @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+        </ReviewDialog>
+    }
+</main>
+
+@code {
+    [Parameter] public Guid DocumentId { get; set; }
+    private readonly CancellationTokenSource _lifetime = new();
+    private DocumentInfo? _document;
+    private PdfCanvas? _canvas;
+    private byte[]? _bytes;
+    private List<Highlight> _highlights = [];
+    private Highlight? _selected;
+    private Highlight? _deleting;
+    private PdfCheck? _check;
+    private PdfCandidate? _preview;
+    private (int Page, PageRectangle Rectangle)? _draft;
+    private int _page = 1;
+    private string _description = "";
+    private string? _error;
+    private bool _rectangleMode;
+    private bool _all;
+    private bool _starting;
+    private bool _saving;
+    private bool Checking => _starting || _check?.Active == true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var ct = _lifetime.Token;
+        try
+        {
+            var documents = Api.Documents(ct);
+            var highlights = Api.Highlights(DocumentId, ct);
+            var bytes = Api.Pdf(DocumentId, ct);
+            var latest = Api.LatestCheck(DocumentId, ct);
+            await Task.WhenAll(documents, highlights, bytes, latest);
+            _document = (await documents).FirstOrDefault(item => item.Id == DocumentId)
+                ?? throw new InvalidOperationException("PDFが見つかりません。");
+            _highlights = await highlights;
+            _check = await latest;
+            _bytes = await bytes;
+            if (_check?.Active == true) await MonitorCheck(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+    }
+
+    private Task Zoom(int direction) => _canvas?.Zoom(direction) ?? Task.CompletedTask;
+    private Task FitWidth() => _canvas?.FitWidth() ?? Task.CompletedTask;
+    private static string Label(Highlight highlight) => string.IsNullOrEmpty(highlight.Description) ? "説明なし" : highlight.Description;
+
+    private void BeginDraft((int Page, PageRectangle Rectangle) value)
+    {
+        _draft = value;
+        _description = "";
+        _error = null;
+    }
+
+    private async Task SaveDraft()
+    {
+        if (_draft is not { } draft || _saving) return;
+        await Save(new(draft.Page, draft.Rectangle, _description));
+        if (_error is null) _draft = null;
+    }
+
+    private async Task Adopt(PdfCandidate candidate)
+    {
+        if (candidate.Rectangle is not { } rectangle || _saving) return;
+        var correction = string.IsNullOrEmpty(candidate.Suggestion) ? "削除" : $"「{candidate.Suggestion}」";
+        var description = $"「{candidate.Original}」→ {correction}";
+        if (candidate.Reason.Length > 0) description += $"\n{candidate.Reason}";
+        await Save(new(candidate.PageNumber, rectangle, description, candidate.Id));
+    }
+
+    private async Task Save(NewHighlight highlight)
+    {
+        var ct = _lifetime.Token;
+        _saving = true;
+        _error = null;
+        try
+        {
+            var saved = await Api.AddHighlight(DocumentId, highlight, ct);
+            if (_highlights.All(item => item.Id != saved.Id)) _highlights.Add(saved);
+            SelectOverlay(saved);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+        finally { _saving = false; }
+    }
+
+    private async Task DeleteHighlight()
+    {
+        if (_deleting is not { } highlight || _saving) return;
+        var ct = _lifetime.Token;
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.DeleteHighlight(highlight.Id, ct);
+            _highlights.Remove(highlight);
+            if (_selected?.Id == highlight.Id) _selected = null;
+            _deleting = null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+        finally { _saving = false; }
+    }
+
+    private void SelectOverlay(Highlight highlight)
+    {
+        _selected = highlight;
+        _preview = null;
+    }
+
+    private async Task FocusHighlight(Highlight highlight)
+    {
+        SelectOverlay(highlight);
+        if (_canvas is not null) await _canvas.Focus(highlight.PageNumber, highlight.Rectangle);
+    }
+
+    private async Task FocusCandidate(PdfCandidate item)
+    {
+        if (_canvas is null || item.Rectangle is not { } rectangle) return;
+        _selected = _highlights.FirstOrDefault(highlight => highlight.Id == item.Id);
+        _preview = _selected is null ? item : null;
+        await _canvas.Focus(item.PageNumber, rectangle);
+    }
+
+    private async Task StartCheck()
+    {
+        if (Checking) return;
+        var ct = _lifetime.Token;
+        _starting = true;
+        _error = null;
+        _preview = null;
+        try
+        {
+            try { _check = await Api.StartCheck(DocumentId, _all, _page, ct); }
+            catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _check = await Api.LatestCheck(DocumentId, ct);
+            }
+            await MonitorCheck(ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+        finally { _starting = false; }
+    }
+
+    private async Task MonitorCheck(CancellationToken ct)
+    {
+        await InvokeAsync(StateHasChanged);
+        while (_check is { Active: true } running)
+        {
+            await Task.Delay(450, ct);
+            try
+            {
+                _check = await Api.CheckStatus(DocumentId, running.Id, ct);
+            }
+            catch (HttpRequestException error) when (error.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _check = null;
+                throw new InvalidOperationException("チェック結果が見つかりません。もう一度開始してください。", error);
+            }
+            catch (HttpRequestException)
+            {
+                _error = "進捗を取得できませんでした。再接続しています。";
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1400, ct);
+                continue;
+            }
+            _error = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+}

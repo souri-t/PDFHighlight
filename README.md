@@ -10,7 +10,7 @@ Docker EngineとDocker Composeが動作している環境で、プロジェク�
 docker compose up --build
 ```
 
-[http://localhost:8080](http://localhost:8080) を開きます。停止とコンテナの削除は `docker compose down` で行えます。ポートを変更する場合は `PDF_HIGHLIGHT_PORT=8081 docker compose up --build` を実行します。
+[http://localhost:8080](http://localhost:8080) を開きます。標準のフロントエンドはBlazor WebAssemblyです。停止とコンテナの削除は `docker compose down` で行えます。ポートを変更する場合は `PDF_HIGHLIGHT_PORT=8081 docker compose up --build` を実行します。
 
 | ホスト側の保存先 | 内容 |
 | --- | --- |
@@ -18,6 +18,8 @@ docker compose up --build
 | `./data/pdf-highlight.db` | PDFのメタデータとハイライト |
 
 Composeはホストの `./data` をAPIコンテナの `/data` にバインドマウントします。`PDF_DATA_DIR` に別のホストフォルダを指定できます。初回起動時にSQLiteを初期化します。
+
+React版を比較する場合は `docker compose -f compose.yaml -f compose.react.yaml up --build` で切り替えます。同じAPIとデータフォルダを使えます。
 
 ## 操作と検証
 
@@ -41,13 +43,16 @@ npm --prefix tests test
 テストは一時PDFを生成し、終了時に削除します。別ポートを使う場合は `BASE_URL=http://127.0.0.1:8081 npm --prefix tests test` で接続先を指定できます。
 
 - APIテストはアップロードの検証、PDFのバイト一致、HTTP Rangeの `206` / `416`、ハイライトの登録、入力検証、PDF削除時の連鎖削除を確認します。
+- Blazorの描画テストは、ページ画像のBlob URL生成・解放と、日本語本文の選択・コピーを確認します。
 - ブラウザテストは文字選択、サイズと回転が異なる2ページへの矩形登録、再読み込み、拡大・縮小後の四辺の位置、該当箇所へのスクロール、説明表示、削除を確認します。
 
 ## 実装
 
-フロントエンドはReact 18.3.1、TypeScript、Vite、MUIを使用しています。`react-pdf-highlighter-extended` 8.1.0の `PdfLoader` と `PdfHighlighter` でPDF.jsを利用し、矩形選択とオーバーレイの配置を行います。PDF.js本体とWorkerは同じ4.10.38を使用し、アプリと同じホストから配信します。[ライブラリの公式ドキュメント](https://danielarnould.github.io/react-pdf-highlighter-extended/docs/)
+フロントエンドは.NET 10のBlazor WebAssemblyと[MudBlazor](https://github.com/MudBlazor/MudBlazor)を使用しています。PDFファイルをブラウザに読み込み、表示付近のページを[PDFtoImage](https://github.com/sungaila/PDFtoImage)で必要なときに描画します。生成画像はブラウザのメモリ上のBlob URLで表示し、表示範囲外になったときや閲覧画面を閉じたときに解放します。画像ファイルの生成やDBへの画像保存はありません。文字選択とコピーにはPdfPigで取得した文字情報を使います。
 
-保存する矩形は、PDFの表示向きにおけるページ左上を原点とした比率 `{ left, top, right, bottom }` です。各値は0〜1、ページ番号は1始まりです。選択時にはライブラリから受け取った座標をページの幅と高さで割り、描画時にはライブラリの `ScaledPosition` に戻します。変換は `frontend/src/coordinates.ts` に置いています。
+拡大時は画面の倍率に合わせて画像を再描画します。生成画像は縦横それぞれ最大4,096ピクセルです。特殊なフォントや任意の方向で配置された文字では、文字選択範囲の見え方がPDF本文と異なる場合があります。
+
+保存する矩形は、PDFの表示向きにおけるページ左上を原点とした比率 `{ left, top, right, bottom }` です。各値は0〜1、ページ番号は1始まりです。選択時にはページ内の位置をページの幅と高さで割り、描画時はその比率を現在の表示サイズに適用します。Blazor版では `frontend-blazor/Components/PdfCanvas.razor` がページ寸法から座標を変換します。React版の変換は `frontend/src/coordinates.ts` にあります。
 
 APIはASP.NET Core 10、永続化はEF Core 10とSQLiteを使います。Business層が登録・削除と入力検証を担当し、Infrastructure層がSQLiteとPDFファイルを扱います。PDFのページ数はアップロード時にPdfPigで取得します。
 

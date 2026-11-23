@@ -1,0 +1,220 @@
+@implements IDisposable
+@inject ReviewApi Api
+
+<main class="viewer-page">
+    <div class="viewer-heading">
+        <MudButton Href="/workbooks" StartIcon="@Icons.Material.Rounded.ArrowBack">Excel一覧に戻る</MudButton>
+        @if (_book is not null) { <div class="viewer-title"><h1>@_book.Info.FileName</h1></div> }
+    </div>
+    @if (_book is null)
+    {
+        @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+        else { <div class="viewer-loading"><MudProgressCircular Indeterminate="true" /></div> }
+    }
+    else
+    {
+        <div class="viewer-workspace">
+            <section class="preview" aria-label="閲覧">
+                <div class="workbook-sheet-tabs control-group" role="tablist" aria-label="ワークシート">
+                    @foreach (var sheet in _book.Sheets)
+                    {
+                        <button type="button" role="tab" @key="sheet.Number" aria-selected="@(sheet.Number == _sheetNumber ? "true" : "false")"
+                                @onclick="() => LoadSheet(sheet.Number)">@sheet.Name</button>
+                    }
+                </div>
+                @if (_sheetError is not null) { <MudAlert role="alert" Severity="Severity.Error">@_sheetError</MudAlert> }
+                else if (_sheet is { } current && current.Info.Number == _sheetNumber)
+                {
+                    <WorkbookGrid Sheet="current" Selected="_selected" @key="current.Info.Number" />
+                }
+                else { <div class="viewer-loading"><MudProgressCircular Indeterminate="true" Size="Size.Small" /></div> }
+            </section>
+            <aside class="workbook-review" aria-label="Excelレビュー">
+                <div class="panel-heading"><h2>誤字チェック</h2></div>
+                <div class="proofreading-controls">
+                    <div class="control-group" role="group" aria-label="チェック範囲">
+                        <MudButton Size="Size.Small" Variant="@(!_all ? Variant.Filled : Variant.Outlined)"
+                                   Disabled="@_working" OnClick="@(() => _all = false)">現在のシート</MudButton>
+                        <MudButton Size="Size.Small" Variant="@(_all ? Variant.Filled : Variant.Outlined)"
+                                   Disabled="@_working" OnClick="@(() => _all = true)">全シート</MudButton>
+                    </div>
+                    <p class="proofreading-target">対象：@(_all ? $"全{_book.Sheets.Count}シート" : SheetName(_sheetNumber))</p>
+                    <MudButton FullWidth="true" Variant="Variant.Filled" Color="Color.Primary"
+                               Disabled="@(_working || _sheetNumber == 0)" OnClick="Check"> @(_working ? "チェック中…" : "誤字チェックを開始")</MudButton>
+                </div>
+                @if (_working) { <MudProgressLinear Indeterminate="true" Color="Color.Primary" /> }
+                @if (_progress is not null) { <p role="status" class="workbook-review-message">@_progress</p> }
+                @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+                @foreach (var notice in _notices) { <MudAlert role="alert" Severity="Severity.Warning">@notice</MudAlert> }
+                @if (_results.Count > 0)
+                {
+                    <ul class="workbook-findings" aria-label="誤字候補">
+                        @foreach (var finding in _results) { @FindingRow(finding, false) }
+                    </ul>
+                }
+                <div class="panel-heading"><h2>採用済みの指摘</h2><span>@_saved.Count 件</span></div>
+                <ul class="workbook-findings" aria-label="採用済みの指摘">
+                    @foreach (var saved in _saved) { @FindingRow(saved.Finding, true) }
+                </ul>
+            </aside>
+        </div>
+    }
+</main>
+
+@code {
+    [Parameter] public Guid WorkbookId { get; set; }
+    private readonly CancellationTokenSource _lifetime = new();
+    private CancellationTokenSource? _sheetLoad;
+    private WorkbookDetails? _book;
+    private WorksheetPreview? _sheet;
+    private int _sheetNumber;
+    private readonly List<CellFinding> _results = [];
+    private readonly List<string> _notices = [];
+    private List<SavedFinding> _saved = [];
+    private CellFinding? _selected;
+    private CellFinding? _adopting;
+    private bool _all;
+    private bool _working;
+    private string? _progress;
+    private string? _error;
+    private string? _sheetError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var ct = _lifetime.Token;
+        try
+        {
+            var workbook = Api.Workbook(WorkbookId, ct);
+            var findings = Api.Findings(WorkbookId, ct);
+            await Task.WhenAll(workbook, findings);
+            _book = await workbook;
+            _saved = await findings;
+            if (_book.Sheets.FirstOrDefault() is { } sheet) await LoadSheet(sheet.Number);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+    }
+
+    private async Task LoadSheet(int number)
+    {
+        if (_sheet?.Info.Number == number && _sheetNumber == number) return;
+        _sheetLoad?.Cancel();
+        _sheetLoad?.Dispose();
+        var operation = _sheetLoad = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _sheetNumber = number;
+        _sheetError = null;
+        try
+        {
+            var sheet = await Api.Sheet(WorkbookId, number, operation.Token);
+            if (!operation.IsCancellationRequested) _sheet = sheet;
+        }
+        catch (OperationCanceledException) when (operation.IsCancellationRequested) { }
+        catch (Exception error) when (!operation.IsCancellationRequested) { _sheetError = error.Message; }
+    }
+
+    private string? SheetName(int number) => _book?.Sheets.FirstOrDefault(item => item.Number == number)?.Name;
+    private bool Saved(CellFinding item) => _saved.Any(entry => entry.Finding.SameAs(item));
+    private string? Source(CellFinding item) => _sheet?.Info.Number == item.SheetNumber
+        ? _sheet.Cells.FirstOrDefault(cell => cell.Row == item.Row && cell.Column == item.Column)?.Text : null;
+
+    private RenderFragment FindingRow(CellFinding item, bool isSaved) => @<li class="@(_selected?.SameAs(item) == true ? "workbook-finding-selected" : "")">
+        <strong>@SheetName(item.SheetNumber)!@item.Address</strong>
+        <p><mark>@item.Original</mark> → @(string.IsNullOrEmpty(item.Suggestion) ? "削除" : item.Suggestion)</p>
+        @if (_selected?.SameAs(item) == true && Source(item) is { } text && item.Start is int start &&
+             start >= 0 && start + item.Original.Length <= text.Length)
+        {
+            <p>@text[..start]<mark>@text.Substring(start, item.Original.Length)</mark>@text[(start + item.Original.Length)..]</p>
+        }
+        @if (item.Reason.Length > 0) { <p>@item.Reason</p> }
+        <div class="proofreading-actions">
+            <MudButton Size="Size.Small" OnClick="@(() => Focus(item))">セルを表示</MudButton>
+            @if (!isSaved)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                           Disabled="@(Saved(item) || item.Start is null || _adopting is not null)"
+                           OnClick="@(() => Adopt(item))">@(Saved(item) ? "採用済み" : "採用")</MudButton>
+            }
+        </div>
+        @if (item.Start is null) { <small>セル内の文字範囲を特定できませんでした。</small> }
+    </li>;
+
+    private async Task Focus(CellFinding finding)
+    {
+        _selected = finding with { };
+        await LoadSheet(finding.SheetNumber);
+    }
+
+    private async Task Adopt(CellFinding finding)
+    {
+        if (_adopting is not null || Saved(finding)) return;
+        var ct = _lifetime.Token;
+        _adopting = finding;
+        _error = null;
+        try
+        {
+            var adopted = await Api.Adopt(WorkbookId, finding, ct);
+            if (_saved.All(item => item.Id != adopted.Id)) _saved.Add(adopted);
+            await Focus(finding);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; }
+        finally { _adopting = null; }
+    }
+
+    private async Task Check()
+    {
+        if (_book is null || _working || _sheetNumber == 0) return;
+        var ct = _lifetime.Token;
+        var targets = _book.Sheets.Where(sheet => _all || sheet.Number == _sheetNumber).ToArray();
+        _working = true;
+        _results.Clear();
+        _notices.Clear();
+        _selected = null;
+        _error = null;
+        var failed = 0;
+
+        try
+        {
+            for (var index = 0; index < targets.Length; index++)
+            {
+                var target = targets[index];
+                var label = $"{index + 1} / {targets.Length} シート · {target.Name}";
+                _progress = label;
+                await InvokeAsync(StateHasChanged);
+                var skipped = 0;
+                int? offset = 0;
+                try
+                {
+                    while (offset is int next)
+                    {
+                        var batch = await Api.CheckSheet(WorkbookId, target.Number, next, ct);
+                        _results.AddRange(batch.Candidates);
+                        skipped += batch.Skipped;
+                        _progress = $"{label} · {batch.Processed} / {batch.Total} セル処理済み";
+                        offset = batch.NextOffset;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (HttpRequestException error) when (error.StatusCode != System.Net.HttpStatusCode.ServiceUnavailable)
+                {
+                    failed++;
+                    _notices.Add($"{target.Name} · {error.Message}");
+                }
+                if (skipped > 0) _notices.Add($"{target.Name} · 3,000文字を超えるセルを {skipped} 件スキップしました。");
+            }
+            _progress = failed > 0
+                ? $"{targets.Length} シート処理済み · 失敗 {failed} シート · 候補 {_results.Count} 件"
+                : $"{targets.Length} シート完了 · 候補 {_results.Count} 件";
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception error) { _error = error.Message; _progress = null; }
+        finally { _working = false; }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _sheetLoad?.Dispose();
+        _lifetime.Dispose();
+    }
+}

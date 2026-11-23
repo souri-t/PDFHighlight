@@ -1,0 +1,22 @@
+<div class="review-backdrop">
+    <section class="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-dialog-title"
+             @onkeydown="HandleKey">
+        <h2 id="review-dialog-title">@Title</h2>
+        @ChildContent
+        <div class="review-dialog-actions">
+            <MudButton Disabled="@Busy" OnClick="@Cancel">キャンセル</MudButton>
+            <MudButton Disabled="@Busy" Variant="Variant.Filled" Color="@Color" OnClick="@Confirm">@ActionText</MudButton>
+        </div>
+    </section>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string ActionText { get; set; } = "";
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback Cancel { get; set; }
+    [Parameter] public EventCallback Confirm { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    private Task HandleKey(KeyboardEventArgs e) => e.Key == "Escape" && !Busy ? Cancel.InvokeAsync() : Task.CompletedTask;
+}

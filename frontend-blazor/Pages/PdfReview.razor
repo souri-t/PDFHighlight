@@ -1,0 +1,7 @@
+@page "/documents/{Id:guid}"
+
+<PdfDocumentScreen DocumentId="@Id" @key="Id" />
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+}

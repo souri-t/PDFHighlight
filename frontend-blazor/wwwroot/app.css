@@ -1,0 +1,96 @@
+:root {
+  --ink: #172035;
+  --muted: #526078;
+  --line: #e2e7f0;
+  --indigo: #4338ca;
+  --surface: #fff;
+}
+
+body { margin: 0; color: var(--ink); font-family: system-ui, sans-serif; background: #f4f6fa; }
+.app-header { height: 65px; display: flex; align-items: center; justify-content: space-between; padding-inline: clamp(16px, 4vw, 56px); border-bottom: 1px solid var(--line); background: white; }
+.brand { font-size: 19px; font-weight: 800; letter-spacing: -.04em; text-decoration: none; color: var(--ink); }
+.app-nav { display: flex; gap: 4px; }
+.app-nav a { padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 13px; font-weight: 700; color: var(--muted); }
+.app-nav a.active, .app-nav a:hover { background: #eeedff; color: var(--indigo); }
+.loading-page { margin: 36px; color: var(--muted); }
+.library { max-width: 1120px; margin: auto; padding: 64px 28px 52px; }
+.library-heading { margin-bottom: 30px; }
+.library-heading h1 { margin: 0; font-size: clamp(26px, 3.1vw, 38px); line-height: 1.2; }
+.library-heading p, .upload-zone p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+.upload-zone { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px; border: 1px dashed #a4a5dc; border-radius: 14px; background: #eeeffc; }
+.upload-action { border-radius: 6px; padding: 9px 16px; background: var(--indigo); color: white; cursor: pointer; font-size: 14px; font-weight: 700; }
+.upload-action[aria-disabled=true] { opacity: .5; cursor: default; }
+.upload-action:focus-within { outline: 2px solid #27217b; outline-offset: 3px; }
+.upload-action input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: inherit; }
+.document-section { margin-top: 38px; }
+.section-heading, .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.section-heading { margin-bottom: 12px; }
+.section-heading h2, .panel-heading h2 { margin: 0; font-size: 17px; font-weight: 800; }
+.section-heading span, .panel-heading span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.panel-heading { padding: 12px; border-bottom: 1px solid var(--line); }
+.workbook-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.workbook-list li { min-height: 53px; padding: 6px 14px; display: flex; align-items: center; gap: 14px; }
+.workbook-list li + li { border-top: 1px solid var(--line); }
+.file-link { color: var(--ink); text-decoration: none; font-weight: 700; overflow-wrap: anywhere; flex: 1; }
+.file-link:hover { color: var(--indigo); }
+.file-meta { color: var(--muted); white-space: nowrap; font-size: 13px; }
+.viewer-page { height: calc(100dvh - 65px); display: flex; flex-direction: column; }
+.viewer-heading { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 8px clamp(12px, 2vw, 24px); background: white; border-bottom: 1px solid var(--line); }
+.viewer-heading > a { flex: none; }
+.viewer-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.viewer-title h1 { margin: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-title span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.viewer-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); }
+.preview { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.viewer-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; background: #fafbfe; border-bottom: 1px solid var(--line); }
+.control-group, .zoom-controls { display: flex; align-items: center; gap: 4px; }
+.zoom-controls output { min-width: 52px; text-align: center; color: var(--muted); font-size: 12px; }
+.viewer-loading { display: grid; place-items: center; flex: 1; padding: 24px; }
+.pdf-stage { position: relative; flex: 1; min-height: 0; background: #e6eaf2; }
+.pdf-stage > .mud-alert { position: absolute; inset: 8px 8px auto; z-index: 5; }
+.PdfHighlighter { position: absolute; inset: 0; overflow: auto; overflow-anchor: none; }
+.pdfViewer { display: flex; flex-direction: column; align-items: center; width: max-content; min-width: 100%; padding: 12px; gap: 10px; }
+.pdfViewer .page { position: relative; flex: none; container-type: inline-size; background: white; box-shadow: 0 2px 5px #16223c2a; overflow: hidden; }
+.pdf-page-image, .textLayer, .pdf-drag-surface { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pdf-page-image { pointer-events: none; }
+.textLayer { user-select: text; cursor: text; }
+.pdf-text-run { position: absolute; white-space: pre; color: transparent; line-height: 1.3; font-family: Arial, "Noto Sans JP", "Hiragino Sans", sans-serif; transform-origin: top left; transform: rotate(var(--run-angle)) scaleX(var(--run-scale, 1)); }
+.pdf-text-run::selection { color: transparent; background: #4338ca44; }
+.pdf-drag-surface { z-index: 1; cursor: crosshair; touch-action: none; user-select: none; }
+.highlight-rectangle { position: absolute; z-index: 2; border: 2px solid #ffc107; background: #ffca2855; cursor: pointer; padding: 0; }
+.highlight-rectangle--selected { border-color: #9a6b00; background: #ffca286a; }
+.highlight-rectangle--proofreading, .highlight-rectangle--draft { border-color: #5844b2; background: #8072da45; pointer-events: none; }
+.workbook-sheet-tabs { padding: 4px 10px 0; background: white; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
+.workbook-sheet-tabs button { padding: 8px 12px; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 13px; color: var(--muted); background: white; cursor: pointer; white-space: nowrap; }
+.workbook-sheet-tabs button[aria-selected=true] { border-color: var(--indigo); color: var(--indigo); font-weight: 700; }
+.workbook-grid-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px; background: white; }
+.workbook-grid-scroll td[data-x][data-y] { white-space: pre-wrap; }
+.workbook-grid-scroll td.workbook-cell-target { background: #ece9ff; box-shadow: inset 0 0 0 2px #5740be; }
+.workbook-review { overflow-y: auto; min-height: 0; padding-bottom: 12px; background: white; border-left: 1px solid var(--line); }
+.proofreading-controls { padding: 12px; }
+.proofreading-target, .workbook-review-message { margin: 10px 0; color: var(--muted); font-size: 13px; }
+.workbook-review-message { padding-inline: 12px; }
+.workbook-findings { margin: 0; padding: 8px 12px; list-style: none; overflow-wrap: anywhere; }
+.workbook-findings li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.workbook-findings li + li { margin-top: 8px; }
+.workbook-findings li.workbook-finding-selected { border-color: #8178d6; background: #f4f2ff; }
+.workbook-findings p { margin: 4px 0; white-space: pre-wrap; }
+.workbook-findings mark { background: #ffe7a3; }
+.proofreading-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
+.highlight-list-row { display: flex; align-items: center; justify-content: space-between; }
+.highlight-item { border: 0; background: transparent; color: var(--ink); font: inherit; text-align: start; cursor: pointer; flex: 1; overflow-wrap: anywhere; }
+.selected-highlight { padding: 8px 12px; font-size: 13px; overflow-wrap: anywhere; }
+.selected-highlight p { margin: 4px 0; white-space: pre-wrap; }
+.review-backdrop { position: fixed; inset: 0; z-index: 2000; background: #1018285e; display: grid; place-items: center; padding: 16px; }
+.review-dialog { width: min(100%, 440px); border-radius: 12px; padding: 20px; background: white; box-shadow: 0 16px 48px #10182840; }
+.review-dialog h2 { margin: 0 0 12px; font-size: 19px; }
+.review-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.review-field { display: grid; gap: 5px; margin-top: 12px; font-size: 13px; }
+.review-field textarea { padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; font: inherit; }
+@media (max-width: 760px) {
+  .viewer-workspace { grid-template-columns: 1fr; grid-template-rows: minmax(320px, 1fr) minmax(160px, 28vh); }
+  .viewer-page { height: max(calc(100dvh - 65px), 550px); }
+  .workbook-review { border-left: 0; border-top: 1px solid var(--line); }
+  .file-meta { display: none; }
+  .library { padding: 32px 16px; }
+}

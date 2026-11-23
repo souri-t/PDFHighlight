@@ -1,0 +1,9 @@
+**
+!frontend/
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/nginx.conf
+!frontend-blazor/
+!frontend-blazor/**
+frontend-blazor/bin/
+frontend-blazor/obj/

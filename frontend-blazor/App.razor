@@ -1,0 +1,4 @@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="route"><RouteView RouteData="@route" DefaultLayout="@typeof(MainLayout)" /></Found>
+    <NotFound><LayoutView Layout="@typeof(MainLayout)"><main class="library"><h1>ページが見つかりません。</h1></main></LayoutView></NotFound>
+</Router>

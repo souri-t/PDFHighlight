@@ -18,7 +18,9 @@ services:
       timeout: 2s
       retries: 10
   web:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend-blazor/Dockerfile
     depends_on:
       api:
         condition: service_healthy

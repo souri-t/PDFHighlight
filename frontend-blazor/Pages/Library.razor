@@ -1,0 +1,140 @@
+@page "/"
+@page "/workbooks"
+@inject ReviewApi Api
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<main class="library">
+    <div class="library-heading">
+        <h1>@(IsExcel ? "Excelブック" : "ドキュメント")</h1>
+        <p>@(IsExcel ? "シートをプレビューして誤字を確認できます。" : "PDFを開いて、確認したい箇所にマークを付けられます。")</p>
+    </div>
+    <section class="upload-zone">
+        <div><strong>@(IsExcel ? "Excelをアップロード" : "PDFをアップロード")</strong>
+            <p>@(IsExcel ? ".xlsx · 最大10 MiB" : ".pdf · 最大50 MiB")</p>
+        </div>
+        <label class="upload-action" role="button" aria-disabled="@(_busy || _files is null ? "true" : "false")">
+            @(_busy && _target is null ? "アップロード中…" : "ファイルを選択")
+            <InputFile OnChange="Upload" accept="@(IsExcel ? ".xlsx" : "application/pdf,.pdf")"
+                       aria-label="@(IsExcel ? "Excelファイル" : "PDFファイル")"
+                       disabled="@(_busy || _files is null)" />
+        </label>
+    </section>
+    @if (_error is not null && _target is null)
+    {
+        <MudAlert role="alert" Severity="Severity.Error" Class="mt-3">@_error</MudAlert>
+    }
+    <section class="document-section">
+        <div class="section-heading"><h2>@(IsExcel ? "保存済みExcel" : "保存済みPDF")</h2>@if (_files is not null) { <span>@_files.Count 件</span> }</div>
+        @if (_files is null && _error is null)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        @if (_files is not null)
+        {
+            <ul class="workbook-list" aria-label="@(IsExcel ? "保存済みExcel" : "保存済みPDF")">
+                @if (_files.Count == 0) { <li>@(IsExcel ? "Excelファイルはまだありません。" : "PDFがまだありません")</li> }
+                @foreach (var file in _files)
+                {
+                    <li @key="file.Id">
+                        <a class="file-link" href="@((IsExcel ? "/workbooks/" : "/documents/") + file.Id)">@file.Name</a>
+                        @if (file.Pages.HasValue) { <span class="file-meta">@file.Pages ページ</span> }
+                        <time class="file-meta">@file.CreatedAt.ToLocalTime().ToString("g")</time>
+                        <MudIconButton Icon="@Icons.Material.Outlined.Delete" aria-label="@(file.Name + "を削除")"
+                                       Disabled="@_busy" OnClick="@(() => ConfirmDelete(file))" />
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+    @if (_target is not null)
+    {
+        <ReviewDialog Title="@(IsExcel ? "Excelを削除しますか？" : "PDFを削除しますか？")" ActionText="削除する"
+                      Busy="@_busy" Color="Color.Error" Cancel="@(() => _target = null)" Confirm="Delete">
+            <p>「@_target.Name」と登録済みの指摘を削除します。</p>
+            @if (_error is not null) { <MudAlert role="alert" Severity="Severity.Error">@_error</MudAlert> }
+        </ReviewDialog>
+    }
+</main>
+
+@code {
+    private record FileItem(Guid Id, string Name, DateTime CreatedAt, int? Pages);
+    private List<FileItem>? _files;
+    private FileItem? _target;
+    private string? _error;
+    private bool _busy;
+    private CancellationTokenSource? _operation;
+    private bool IsExcel => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/') == "workbooks";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _operation?.Cancel();
+        _operation?.Dispose();
+        var operation = _operation = new();
+        var excel = IsExcel;
+        _files = null;
+        _target = null;
+        _error = null;
+        _busy = false;
+        try
+        {
+            var files = excel ? (await Api.Workbooks(operation.Token)).Select(Map).ToList()
+                : (await Api.Documents(operation.Token)).Select(Map).ToList();
+            if (!operation.IsCancellationRequested) _files = files;
+        }
+        catch (Exception error) when (!operation.IsCancellationRequested) { _error = error.Message; }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task Upload(InputFileChangeEventArgs args)
+    {
+        if (_busy || _files is null || _operation is null) return;
+        var operation = _operation;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var item = IsExcel ? Map(await Api.UploadWorkbook(args.File, operation.Token))
+                : Map(await Api.UploadDocument(args.File, operation.Token));
+            if (!operation.IsCancellationRequested) _files.Insert(0, item);
+        }
+        catch (Exception error) when (!operation.IsCancellationRequested) { _error = error.Message; }
+        catch (OperationCanceledException) { }
+        finally { if (!operation.IsCancellationRequested) _busy = false; }
+    }
+
+    private void ConfirmDelete(FileItem file)
+    {
+        _error = null;
+        _target = file;
+    }
+
+    private async Task Delete()
+    {
+        if (_busy || _target is not { } file || _operation is null) return;
+        var operation = _operation;
+        _busy = true;
+        try
+        {
+            if (IsExcel) await Api.DeleteWorkbook(file.Id, operation.Token);
+            else await Api.DeleteDocument(file.Id, operation.Token);
+            if (!operation.IsCancellationRequested)
+            {
+                _files?.Remove(file);
+                _target = null;
+            }
+        }
+        catch (Exception error) when (!operation.IsCancellationRequested) { _error = error.Message; }
+        catch (OperationCanceledException) { }
+        finally { if (!operation.IsCancellationRequested) _busy = false; }
+    }
+
+    private static FileItem Map(DocumentInfo value) => new(value.Id, value.FileName, value.CreatedAt, value.PageCount);
+    private static FileItem Map(WorkbookInfo value) => new(value.Id, value.FileName, value.CreatedAt, null);
+
+    public void Dispose()
+    {
+        _operation?.Cancel();
+        _operation?.Dispose();
+    }
+}
