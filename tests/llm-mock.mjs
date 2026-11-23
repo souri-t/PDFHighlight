@@ -53,6 +53,18 @@ createServer(async (request, response) => {
       respond(response, 400, { error: 'Japanese text must be readable in the model prompt' });
       return;
     }
+    if (segments.some(({ id }) => /^R[0-9]+C[0-9]+$/.test(id))) {
+      if (segments.some(({ text }) => text === '数式の結果' || text === '非表示の情報')) {
+        respond(response, 400, { error: 'Formula or hidden sheet was sent' });
+        return;
+      }
+      const findings = segments.flatMap(({ id, text }) => [
+        ['受理理', '受理'], ['くさだい', 'ください'],
+      ].filter(([original]) => text.includes(original)).map(([original, suggestion]) =>
+        ({ segmentId: id, original, suggestion, reason: '誤字の修正', before: '', after: '' })));
+      respond(response, 200, { choices: [{ message: { content: JSON.stringify({ findings }) } }] });
+      return;
+    }
     const page = replacements.findIndex((pairs) =>
       pairs.some(([original]) => segments.some(({ text }) => text.includes(original)))) + 1;
     calls.push({ page, model: body.model, responseFormat: body.response_format?.type });

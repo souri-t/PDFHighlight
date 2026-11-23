@@ -1,4 +1,5 @@
 import type { DocumentInfo, HighlightInfo, NewHighlight, ProofreadingCheck, ProofreadingScope } from './models';
+import type { CellFinding, SavedCellFinding, WorkbookDetails, WorkbookInfo, WorksheetCheck, WorksheetPreview } from "./workbookModels";
 
 const documentsUrl = '/api/documents';
 const documentUrl = (id: string) => `${documentsUrl}/${encodeURIComponent(id)}`;
@@ -61,3 +62,28 @@ export const api = {
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '処理に失敗しました。';
 }
+
+const workbooksUrl = '/api/workbooks';
+const workbookUrl = (id: string) => `${workbooksUrl}/${encodeURIComponent(id)}`;
+const sheetUrl = (id: string, number: number) => `${workbookUrl(id)}/sheets/${number}`;
+
+export const workbookApi = {
+  list: (signal: AbortSignal) => json<WorkbookInfo[]>(workbooksUrl, { signal }),
+  upload(file: File) {
+    const body = new FormData();
+    body.set('file', file);
+    return json<WorkbookInfo>(workbooksUrl, { method: 'POST', body });
+  },
+  delete: (id: string) => request(workbookUrl(id), { method: 'DELETE' }),
+  details: (id: string, signal: AbortSignal) => json<WorkbookDetails>(workbookUrl(id), { signal }),
+  sheet: (id: string, number: number, signal: AbortSignal) => json<WorksheetPreview>(sheetUrl(id, number), { signal }),
+  findings: (id: string, signal: AbortSignal) =>
+    json<SavedCellFinding[]>(`${workbookUrl(id)}/findings`, { signal }),
+  check: (id: string, number: number, offset: number, signal: AbortSignal) =>
+    json<WorksheetCheck>(`${sheetUrl(id, number)}/proofreading`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ offset }), signal,
+    }),
+  adopt: (id: string, finding: CellFinding) => json<SavedCellFinding>(`${workbookUrl(id)}/findings`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(finding),
+  }),
+};

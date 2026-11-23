@@ -10,7 +10,8 @@ internal sealed class ApiExceptionHandler : IExceptionHandler
         var status = exception switch
         {
             InvalidInputException => StatusCodes.Status400BadRequest,
-            DocumentNotFoundException => StatusCodes.Status404NotFound,
+            DocumentNotFoundException or WorkbookNotFoundException => StatusCodes.Status404NotFound,
+            ProofreadingModelException => StatusCodes.Status502BadGateway,
             _ => 0
         };
 

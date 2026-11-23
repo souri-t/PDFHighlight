@@ -275,3 +275,23 @@
   .proofreading-results { max-height: 240px; }
   .highlight-list { flex: 1 0 auto; overflow: visible; }
 }
+
+.app-nav { display: flex; gap: 4px; }
+.workbook-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.workbook-list li { min-height: 53px; padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workbook-list li + li { border-top: 1px solid var(--line); }
+.workbook-sheet-tabs { flex: none; padding-inline: 8px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.workbook-grid-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px; background: var(--surface); }
+.workbook-grid-scroll td[data-x][data-y] { white-space: pre-wrap; }
+.workbook-grid-scroll td.workbook-cell-target { background: #ece9ff; box-shadow: inset 0 0 0 2px #5740be; }
+.workbook-review { overflow-y: auto; min-height: 0; padding-bottom: 12px; background: var(--surface); border-left: 1px solid var(--line); }
+.workbook-review-message { margin: 10px 12px; font-size: 13px; color: var(--muted); }
+.workbook-findings { margin: 0; padding: 8px 12px; list-style: none; overflow-wrap: anywhere; }
+.workbook-findings li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.workbook-findings li + li { margin-top: 8px; }
+.workbook-findings li.workbook-finding-selected { border-color: #8178d6; background: #f4f2ff; }
+.workbook-findings p { margin: 4px 0; white-space: pre-wrap; }
+.workbook-findings mark { background: #ffe7a3; }
+@media (max-width: 760px) {
+  .workbook-review { border-left: 0; border-top: 1px solid var(--line); }
+}

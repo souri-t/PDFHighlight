@@ -22,6 +22,14 @@ public static class InfrastructureSetup
 
         services.AddDbContext<DemoDbContext>(options => options.UseSqlite(connectionString));
         services.AddScoped<IDemoRepository, DemoRepository>();
+        var workbookConnection = new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(root, "excel-review.db"),
+            ForeignKeys = true
+        }.ToString();
+        services.AddDbContext<WorkbookDbContext>(options => options.UseSqlite(workbookConnection));
+        services.AddScoped<IWorkbookStore, WorkbookStore>();
+        services.AddSingleton<IWorkbookReader, ClosedXmlWorkbookReader>();
         services.AddSingleton<IPdfStorage>(provider =>
             new LocalPdfStorage(pdfDirectory, provider.GetRequiredService<ILogger<LocalPdfStorage>>()));
         return services;
@@ -40,5 +48,6 @@ public static class InfrastructureSetup
         await using var scope = services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<DemoDbContext>();
         await database.Database.EnsureCreatedAsync();
+        await scope.ServiceProvider.GetRequiredService<WorkbookDbContext>().Database.EnsureCreatedAsync();
     }
 }

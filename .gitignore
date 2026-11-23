@@ -1,6 +1,7 @@
 # Uploaded PDFs and SQLite data
 data/
 pdf-highlight.db*
+excel-review.db*
 
 # Dependencies and build output
 node_modules/

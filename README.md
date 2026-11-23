@@ -98,3 +98,17 @@ docker compose -p pdfhighlight-test -f compose.yaml -f tests/compose.proofreadin
 BASE_URL=http://127.0.0.1:55080 PROOFREADING_MOCK_URL=http://127.0.0.1:55134 npm --prefix tests test
 docker compose -p pdfhighlight-test -f compose.yaml -f tests/compose.proofreading.yaml down
 ```
+
+## Excelブックのプレビューと誤字チェック
+
+上部ナビゲーションの「Excel」から `.xlsx` をアップロードします。[検証用のExcelブック](tests/fixtures/japanese-workbook.xlsx) には、表示対象の2シートに誤字が1件ずつあります。
+
+1. シートのタブを選び、列幅や結合セルを含む表を確認します。
+2. 「現在のシート」または「全シート」を選び、「誤字チェックを開始」を押します。PDF校正と共通の `LLM_BASE_URL` と `LLM_MODEL` を使います。
+3. 「セルを表示」で該当セルへ移動します。「採用」でシート番号、セル番地、原文内の開始位置、原文、修正案、理由を保存します。
+
+読取には [ClosedXML](https://github.com/ClosedXML/ClosedXML)、表示には [Jspreadsheet CE](https://github.com/jspreadsheet/ce) を使います。表示は読み取り専用です。数式は保存済みの計算値を表示し、校正は表示シートの直接入力された文字列を対象にします。全シートを選ぶと、ブラウザがシートごとに複数の小さなリクエストを送り、進捗と得られた候補を表示します。未採用の候補はその画面を開いている間保持されます。
+
+原本、シートの表示データ、採用済み指摘は `./data/excel-review.db` に保存します。ブックIDはアップロードごとに新しく発行し、行・列は1始まり、原文内の位置はUTF-16の0始まりで扱います。
+
+アップロード上限は10 MiBです。表示範囲は1シート20,000セル、ブック全体100,000セルまでです。3,000文字を超えるセルは校正時にスキップして画面に表示します。グラフ、画像、条件付き書式などはプレビュー対象外です。検証は上記の「互換APIのモックで検証」と同じコマンドで実行できます。

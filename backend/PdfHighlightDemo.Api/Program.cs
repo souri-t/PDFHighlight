@@ -19,6 +19,7 @@ builder.Services.AddProofreadingInfrastructure(new ProofreadingModelOptions(
     llm["BaseUrl"], llm["Model"], llm["ApiKey"], llm.GetValue("UseJsonSchema", true),
     llm.GetValue("TimeoutSeconds", 120)));
 builder.Services.AddScoped<ProofreadingService>();
+builder.Services.AddScoped<WorkbookReview>();
 builder.Services.AddSingleton<ProofreadingJobs>();
 builder.Services.AddHostedService(services => services.GetRequiredService<ProofreadingJobs>());
 
